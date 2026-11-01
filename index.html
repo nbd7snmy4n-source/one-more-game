@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#10131b">
+<title>ONE MORE — Pixel Arcade</title>
+<style>
+:root{color-scheme:dark;--bg:#10131b;--panel:#191e29;--line:#343c49;--ink:#e9eadf;--muted:#9ba58f;--accent:#d9e2b0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-height:100vh;display:grid;place-items:center;padding:22px}
+main{width:min(100%,470px)}header{text-align:center;margin-bottom:18px}.eyebrow{font-size:11px;letter-spacing:.32em;color:var(--muted)}h1{font-size:clamp(34px,9vw,48px);letter-spacing:.12em;margin:8px 0 4px}.sub{font-size:11px;color:var(--muted);letter-spacing:.12em}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}.stat{background:var(--panel);border:1px solid var(--line);padding:10px;border-radius:5px}.label{font-size:10px;color:var(--muted);letter-spacing:.12em}.value{font-size:22px;font-weight:bold;margin-top:3px}
+.frame{position:relative;border:2px solid #596273;background:#10131b;border-radius:5px;overflow:hidden;box-shadow:0 12px 40px #0005}canvas{display:block;width:100%;height:auto;image-rendering:pixelated;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:#10131beF}.overlay h2{font-size:30px;letter-spacing:.13em;margin:0 0 12px}.overlay p{font-size:13px;line-height:1.9;color:#c2c9b7}.overlay button{margin-top:18px;background:var(--accent);color:#10131b;border:0;border-radius:3px;padding:13px 28px;font: bold 13px ui-monospace;letter-spacing:.1em;cursor:pointer}
+.info{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:9px 1px 12px}.controls{display:flex;gap:8px}.controls button{flex:1;padding:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:4px;font: bold 13px ui-monospace}
+.help{margin-top:15px;padding:13px 14px;border:1px solid var(--line);border-radius:5px;background:var(--panel);font-size:11px;line-height:1.9;color:var(--muted)}kbd{display:inline-block;color:var(--ink);border:1px solid #697386;border-bottom-width:2px;padding:0 6px;border-radius:3px;font: bold 11px ui-monospace}
+footer{text-align:center;margin-top:14px;color:#667080;font-size:10px;letter-spacing:.12em}
+@media(min-width:700px){body{padding:30px}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="eyebrow">PIXEL ARCADE</div><h1>ONE MORE</h1><div class="sub">ONE MORE SECOND. ONE MORE TRY.</div></header>
+<section class="stats">
+ <div class="stat"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
+ <div class="stat"><div class="label">TIME</div><div class="value" id="time">45.0</div></div>
+ <div class="stat"><div class="label">BEST</div><div class="value" id="best">0</div></div>
+</section>
+<div class="frame">
+ <canvas id="game" width="360" height="460" aria-label="ONE MORE game"></canvas>
+ <input id="keyCapture" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="ゲーム操作用キーボード入力" style="position:absolute;left:8px;bottom:8px;width:1px;height:1px;opacity:.01;border:0;background:transparent;color:transparent;font-size:16px;z-index:2">
+ <div class="overlay" id="overlay"><div class="eyebrow">READY?</div><h2 id="overlayTitle">ONE MORE</h2><p id="overlayText">障害物を避けて、光を集めろ。<br>45秒間生き残ればクリア。<br><br><kbd>A</kbd> / <kbd>←</kbd> 左　 <kbd>D</kbd> / <kbd>→</kbd> 右<br><kbd>SPACE</kbd> スタート・リトライ<br><br>STARTをタップすると入力欄にフォーカスします。<br>スマホのキーボード表示はブラウザの仕様により保証されません。</p><button id="start">START GAME</button></div>
+</div>
+<div class="info"><span>COMBO <b id="combo" style="color:var(--ink)">0</b></span><span id="status">READY TO PLAY</span><span>45 SEC</span></div>
+<div class="controls"><button id="left">← LEFT　[A]</button><button id="right">RIGHT　[D] →</button></div>
+<div class="help">操作：<kbd>A</kbd> / <kbd>←</kbd> で左、<kbd>D</kbd> / <kbd>→</kbd> で右。<kbd>SPACE</kbd> で開始・リトライ。スマホでは画面を左右にフリック。ボタン操作にも対応。</div>
+<footer>NO DOWNLOAD REQUIRED · PLAY IN YOUR BROWSER</footer>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d');
+const W=360,H=460,lanes=[90,180,270];
+let mode='ready',player=1,objects=[],score=0,combo=0,elapsed=0,last=0,spawn=0,raf=0,best=0;
+try{best=+(localStorage.getItem('onemore-best')||0)}catch(e){}
+$('best').textContent=best;
+function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function txt(s,x,y,size,col,align='center'){ctx.font=`bold ${size}px monospace`;ctx.textAlign=align;ctx.fillStyle=col;ctx.fillText(s,x,y)}
+function draw(){
+ ctx.fillStyle='#10131b';ctx.fillRect(0,0,W,H);
+ for(let y=0;y<H;y+=20)for(let x=0;x<W;x+=20)rect(x,y,1,1,'#242a35');
+ lanes.forEach(x=>{for(let y=0;y<H;y+=24)rect(x-1,y,2,10,'#303744')});
+ rect(0,420,W,2,'#77816d');
+ objects.forEach(o=>{if(o.type==='block'){rect(lanes[o.lane]-15,o.y-13,30,26,'#d0d3c1');rect(lanes[o.lane]-9,o.y-7,18,14,'#777e70')}else{rect(lanes[o.lane]-5,o.y-5,10,10,'#e4f3a9');rect(lanes[o.lane]-2,o.y-8,4,16,'#e4f3a9');rect(lanes[o.lane]-8,o.y-2,16,4,'#e4f3a9')}});
+ const x=lanes[player],py=378;
+ rect(x-8,py-8,16,16,'#d9e2b0');rect(x-4,py-12,8,4,'#d9e2b0');rect(x-4,py+8,8,4,'#d9e2b0');rect(x-3,py-3,3,3,'#10131b');rect(x+2,py-3,3,3,'#10131b');
+ if(mode==='playing'){txt('SURVIVE',12,25,10,'#929d88','left');txt(elapsed.toFixed(1)+'s',348,25,12,'#d9e2b0','right')}
+}
+function hud(){$('score').textContent=Math.floor(score);$('time').textContent=Math.max(0,45-elapsed).toFixed(1);$('combo').textContent=combo}
+function move(d){if(mode==='playing')player=Math.max(0,Math.min(2,player+d))}
+function showOverlay(title,text,button){$('overlayTitle').textContent=title;$('overlayText').innerHTML=text;$('start').textContent=button;$('overlay').style.display='flex'}
+function focusKeyboard(){const input=$('keyCapture');try{input.focus({preventScroll:true})}catch(e){input.focus()}}
+function start(){cancelAnimationFrame(raf);mode='playing';player=1;objects=[];score=0;combo=0;elapsed=0;spawn=.3;last=0;$('overlay').style.display='none';$('status').textContent='SURVIVE!';hud();draw();focusKeyboard();raf=requestAnimationFrame(loop)}
+function end(win){mode='over';cancelAnimationFrame(raf);score=Math.floor(score);const record=score>best;if(record){best=score;try{localStorage.setItem('onemore-best',best)}catch(e){}}$('best').textContent=best;$('score').textContent=score;$('status').textContent=win?'CLEARED':'GAME OVER';showOverlay(win?'45 SECONDS!':'GAME OVER',`<strong style="font-size:25px;color:#e9eadf">${score}</strong><br>YOUR SCORE<br><br>BEST　${best}${record?'<br><span style="color:#d9e2b0">NEW RECORD!</span>':''}<br><br><kbd>A</kbd>/<kbd>←</kbd> 左　<kbd>D</kbd>/<kbd>→</kbd> 右<br><kbd>SPACE</kbd> でもう一度`,'ONE MORE');draw()}
+function loop(ts){if(mode!=='playing')return;const dt=Math.min((ts-last)/1000||0,.04);last=ts;elapsed+=dt;score+=dt*10;const speed=145+elapsed*5;spawn-=dt;if(spawn<=0){const lane=Math.floor(Math.random()*3),star=Math.random()<.37;objects.push({lane,y:-20,type:star?'star':'block'});spawn=Math.max(.3,.9-elapsed*.006+(Math.random()*.25-.1))}
+ for(let i=objects.length-1;i>=0;i--){const o=objects[i];o.y+=speed*dt;if(o.lane===player&&o.y>360&&o.y<402){if(o.type==='block'){end(false);return}score+=100+combo*10;combo++;objects.splice(i,1);continue}if(o.y>H+20)objects.splice(i,1)}
+ if(elapsed>=45){elapsed=45;score+=200;hud();end(true);return}hud();draw();raf=requestAnimationFrame(loop)}
+$('start').addEventListener('click',start);$('left').addEventListener('click',()=>move(-1));$('right').addEventListener('click',()=>move(1));
+function handleKey(e){if(['ArrowLeft','ArrowRight',' ','a','A','d','D'].includes(e.key))e.preventDefault();if(e.repeat)return;if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')move(-1);if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')move(1);if(e.code==='Space'&&mode!=='playing')start()}
+window.addEventListener('keydown',handleKey);
+canvas.addEventListener('click',()=>{if(mode==='playing')focusKeyboard()});
+let sx=0,sy=0;canvas.addEventListener('touchstart',e=>{sx=e.changedTouches[0].clientX;sy=e.changedTouches[0].clientY},{passive:true});canvas.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>25&&Math.abs(dx)>Math.abs(dy))move(dx>0?1:-1)},{passive:true});
+let px=0,py=0;canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;px=e.clientX;py=e.clientY});canvas.addEventListener('pointerup',e=>{if(e.pointerType==='touch')return;const dx=e.clientX-px,dy=e.clientY-py;if(Math.abs(dx)>25&&Math.abs(dx)>Math.abs(dy))move(dx>0?1:-1)});
+draw();
+})();
+</script>
+</body>
+</html>
